@@ -1,15 +1,16 @@
 //Stringをもう２００文字くらい使うとメモリ不足でバグる！！！！！！
-
 #include <Adafruit_GPS.h>
 #include <SoftwareSerial.h>
+          
+SoftwareSerial LA66_serial_port(10, 11);  // ArduinoとのRX, TX ピン
+Adafruit_GPS GPS(&Wire); // GPSとシリアル通信
 
-bool stringComplete = false;              // whether the string is complete
-SoftwareSerial LA66_serial_port(10, 11);  // Arduino RX, TX ,
-
-Adafruit_GPS GPS(&Wire);
+bool stringComplete = false;    
+static unsigned long lastTime = 0;  // 最後に処理を行った時間を保存する変数
+unsigned long interval = 60000;     // 実行間隔をミリ秒単位で設定（30秒）
 
 void setup() {
-  GPS.begin(0x10);  // The I2C address to use is 0x10
+  GPS.begin(0x10);  /
   LA66_serial_port.begin(9600);
   Serial.begin(9600);
 }
@@ -48,9 +49,8 @@ String binaryToHex(String binaryString) {
   return hexString;
 }
 
-static unsigned long lastTime = 0;  // 最後に処理を行った時間を保存する変数
-unsigned long interval = 60000;     // 実行間隔をミリ秒単位で設定（30秒）
 
+//60秒ごとに実行
 void loop() {
   unsigned long currentTime = millis();
   char c = GPS.read();
@@ -60,14 +60,14 @@ void loop() {
       if (GPS.parse(GPS.lastNMEA())) {
 
         if (GPS.latitude == 0) {
-          Serial.print("GPS.latitude is 0. skip this turn.\n");
+          Serial.print("GPSが位置情報をとれていません．\n");
           lastTime = currentTime;
           delay(10000);
           return;
         }
 
         // 解析成功
-        // GPSデータの取得
+        // GPSデータを変数へ投入
         double latitude = GPS.latitude / 100;
         double longitude = GPS.longitude / 100;
         int speed = (int)GPS.speed;
@@ -96,8 +96,9 @@ void loop() {
         Serial.println(sec);
 
 
-        //以下処理部
+        //送信するデータを削減するために20引いてビット数減らす
         int lati_int = (int)latitude - 20;
+        //取得した小数部は６０進法なので１０進法に変換
         long lati_flt = ((latitude - (int)latitude) * 500000/3);
         int lon_int = (int)longitude - 120;
         long lon_flt = ((longitude - (int)longitude) * 500000/3);
@@ -139,7 +140,6 @@ void loop() {
         Serial.print(tx_msg);
 
         lastTime = currentTime;
-        //delay(40000);
       }
     }
   }

@@ -8,7 +8,7 @@ from elasticsearch import Elasticsearch
 
 
 # Elasticsearchへのデータ投入関数
-def ES_SENT(datas, index, config_ini):
+def sentToElastic(datas, index, config_ini):
     try:
         for i in range(len(eval(config_ini["Elasticsearch"]["host"]))):
             # Elasticsearch接続設定
@@ -31,14 +31,14 @@ def ES_SENT(datas, index, config_ini):
 
 
 # メッセージをBase64でエンコードする関数
-def ENCODE_BASE64(text):
+def encodeByBase64(text):
     bytes_text = text.encode("utf-8")
     encoded = base64.b64encode(bytes_text)
     encoded_text = encoded.decode("utf-8")
     return encoded_text
 
 
-def CREATE_CSV(datas, data_path):
+def createCSV(datas, data_path):
     file_name = data_path + str(datetime.date.today()) + "_gps.csv"
     # 今日のファイルの存在確認
     if not os.path.exists(file_name):  # ファイルがない場合
@@ -58,27 +58,11 @@ def CREATE_CSV(datas, data_path):
             print("CSV 追加完了.\n")
 
 
-"""MQTTで接続，パブリッシュ，メッセージ受信したときのコールバック関数たち"""
-
-
-def on_connect2(client, userdata, flags, rc):
-    print("MQTT接続に成功しました．")
-
-
-def on_publish(client, userdata, mid):
-    i = 0
-    # print(" ")
-    # print("パブリッシュ成功しました．", client, userdata, mid)
-
-
-def on_message(client, userdata, message):
-    print(f"Received Message: {message.topic} {message.payload.decode()}")
-
 
 """MQTT受信のjsonから必要なもののみ抜き出す"""
 
 
-def DATA_FORMATER(
+def formatDATA(
     sub_data,
 ):
     data = {}
@@ -113,7 +97,7 @@ def DATA_FORMATER(
 
 
 # 前回のデータとデバイスID，時間を比較し同じときFalseを返す
-def UpdateCurrentUL(data, CurrentUL):
+def updateCurrentUL(data, CurrentUL):
     istrue = False
     if data["device_id"] not in CurrentUL:
         CurrentUL[data["device_id"]] = {
@@ -145,18 +129,18 @@ def UpdateCurrentUL(data, CurrentUL):
 """衝突予測されたデバイスのID、そのデバイスが進む方角、そのデバイスの速度を[(id,course,spd),(id,course,spd)]で返す関数たち"""
 
 
-def ALERM(now_devID, CurrentUL, alerm_distance, predicted_seconds):
+def getCollisionDevices(now_devID, CurrentUL, alerm_distance, predicted_seconds):
     alert_devices = []
     predicted_position = {}
     # 距離、方向、予測時間から　全てのデバイスの位置予測
-    predicted_position = PREDICT_POSITION(CurrentUL, predicted_seconds)
+    predicted_position = predictPosition(CurrentUL, predicted_seconds)
     # 受信したデバイスの緯度経度を取得
     now_lat = predicted_position[now_devID]["lat"]
     now_lon = predicted_position[now_devID]["lon"]
     # 他のデバイスとの距離と方角を計算し、距離がalerm_distanceｍ以内ならalert_devicesに追加
     for devID, info in predicted_position.items():
         # if devID != now_devID:
-        distance = int(calculate_distance(now_lat, now_lon, info["lat"], info["lon"]))
+        distance = int(calculateDistance(now_lat, now_lon, info["lat"], info["lon"]))
         if distance <= alerm_distance:
             course = CurrentUL[devID]["course"]
             speed = CurrentUL[devID]["speed"]
@@ -166,7 +150,7 @@ def ALERM(now_devID, CurrentUL, alerm_distance, predicted_seconds):
 
 
 # CurrentULの辞書の緯度経度を、予測される緯度と経度へ更新
-def PREDICT_POSITION(CurrentUL, predicted_seconds):
+def predictPosition(CurrentUL, predicted_seconds):
     PREDICT_POSITION_UL = {}
     # CurrentULのID事にループ
     for device_id, data in CurrentUL.items():
@@ -208,7 +192,7 @@ def PREDICT_POSITION(CurrentUL, predicted_seconds):
 
 
 # 2点間の距離をメートルで計算する
-def calculate_distance(lat1, lon1, lat2, lon2):
+def calculateDistance(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -224,14 +208,14 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 
 # リストのタプルから送信文字列へ変換
-def format_alerm_info(ALERM_dev_info, predicted_seconds):
+def makeAlertStr(ALERM_dev_info, predicted_seconds):
     try:
-        time_str = STR_BIN(int(predicted_seconds / 60), 4, 0, 255)
+        time_str = DECtoBIN(int(predicted_seconds / 60), 4, 0, 255)
         print("\ntime:", predicted_seconds / 60, "=", time_str)
         add_str = ""
         for dev in ALERM_dev_info:
-            course = STR_BIN(int(dev[1]), 9, 0, 512)
-            spd = STR_BIN(int(dev[2]), 7, 0, 127)
+            course = DECtoBIN(int(dev[1]), 9, 0, 512)
+            spd = DECtoBIN(int(dev[2]), 7, 0, 127)
             add_str += course + spd
             print("course , speed:", int(dev[1]), ",", int(dev[2]), "=", add_str)
         # print(add_str)
@@ -248,11 +232,11 @@ def format_alerm_info(ALERM_dev_info, predicted_seconds):
 
 
 # 10から2進数変換，指定したビット長へ
-def STR_BIN(data, zero, low, up):
+def DECtoBIN(data, zero, low, up):
     if low <= data <= up:
         DATA = str(bin(data)[2:]).zfill(zero)
     else:
-        # print("STR_BIN")
+        # print("DECtoBIN")
         print("データエラー：", data)
         DATA = None
     return DATA
